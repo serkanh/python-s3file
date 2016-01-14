@@ -10,10 +10,10 @@ setup(
     author="Jeremy Carbaugh",
     author_email = "jcarbaugh@gmail.com",
     license='BSD',
-    url="http://github.com/jcarbaugh/python-s3file/",
+    url="http://github.com/nicerobot/python-s3file/",
     long_description=long_description,
     py_modules=["s3file"],
-    install_requires=['boto==2.24.0'],
+    install_requires=['boto3==1.2.3'],
     platforms=["any"],
     classifiers=[
         "Development Status :: 4 - Beta",
