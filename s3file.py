@@ -1,5 +1,6 @@
 from urllib.parse import urlparse
 import io, mimetypes, os, datetime, boto3, botocore
+from botocore.client import ClientError
 
 __version__ = '1.3'
 
@@ -24,24 +25,40 @@ class S3File(object):
         self.content_type = content_type or mimetypes.guess_type(self.url.path)[0]
 
         #bucket = self.url.netloc
-        bucket=self.url.path.split("/")[1]
+        self.bucket=self.url.path.split("/")[1]
         # if bucket.endswith('.s3.amazonaws.com'):
         #     bucket = bucket[:-17]
 
         self.client = boto3.resource('s3')
 
-        self.name = "s3://" + bucket + self.url.path
+        self.name = "s3://" + self.bucket + self.url.path
 
-        print(bucket)
-        if create:
-            self.bucket = self.client.Bucket(bucket).create()
+         # The boto-specific methods.
+        def bucket_exists(bucket_name):
+            """
+            Returns ``True`` if a bucket exists and you have access to
+            call ``HeadBucket`` on it, otherwise ``False``.
+            """
+            try:
+                self.client.meta.client.head_bucket(Bucket=bucket_name)
+                return True
+            except ClientError:
+                return False
+
+
+        if create and not bucket_exists(self.bucket):
+            print("creating bucket")
+            self.bucket = self.client.Bucket(self.bucket).create()
         else:
-            self.bucket = self.client.Bucket(bucket)
+            self.bucket = self.client.Bucket(self.bucket)
 
         self.name = self.url.path.lstrip("/")
         self.key = self.client.Object(self.bucket, self.name)
 
         self.buffer.truncate(0)
+
+
+
 
     def __enter__(self):
         return self
@@ -79,7 +96,9 @@ class S3File(object):
                 headers["Expires"] = then.strftime("%a, %d %b %Y %H:%M:%S GMT")
                 headers["Cache-Control"] = 'max-age=%d' % (self.expiration_days * 24 * 3600,)
 
-            self.key.set_contents_from_file(self.buffer, headers=headers, rewind=True)
+            #self.key.set_contents_from_file(self.buffer, headers=headers, rewind=True)
+            self.key.put(Body=open(self.buffer, 'rb'))
+
 
     def close(self):
         """ Close the file and write contents to S3.
