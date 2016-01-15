@@ -16,7 +16,7 @@ class S3File(object):
 
         self.url = urlparse(url)
         self.expiration_days = expiration_days
-        self.buffer = io.StringIO()
+        self.buffer = io.BytesIO()
 
         self.private = private
         self.closed = False
@@ -55,6 +55,7 @@ class S3File(object):
             self.bucket = self.client.Bucket(self.bucket)
 
         self.name = self.url.path.lstrip("/")
+    #    self.name="serkantest.txt"
         self.key = self.client.Object(self.bucket, self.name)
 
         self.buffer.truncate(0)
@@ -100,7 +101,13 @@ class S3File(object):
 
             #self.key.set_contents_from_file(self.buffer, headers=headers, rewind=True)
             #http://boto3.readthedocs.org/en/latest/guide/migrations3.html#storing-data
-            self.key.put(Body=open(self.buffer, 'rb'))
+            print(self.key.bucket_name)
+            print(dir(self.key))
+            print(type(self.buffer))
+
+            self.key.put(Body=self.buffer)
+
+
 
 
     def close(self):
@@ -152,7 +159,8 @@ class S3File(object):
 
     def write(self, s):
         self._writereq = True
-        self.buffer.write(s)
+        self.buffer.write(str.encode(s))
+
 
     def writelines(self, sequence):
         self._writereq = True
