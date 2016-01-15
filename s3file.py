@@ -40,6 +40,7 @@ class S3File(object):
             call ``HeadBucket`` on it, otherwise ``False``.
             """
             try:
+                #http://boto3.readthedocs.org/en/latest/guide/migrations3.html#accessing-a-bucket
                 self.client.meta.client.head_bucket(Bucket=bucket_name)
                 return True
             except ClientError:
@@ -48,6 +49,7 @@ class S3File(object):
 
         if create and not bucket_exists(self.bucket):
             print("creating bucket")
+            #http://boto3.readthedocs.org/en/latest/guide/migrations3.html#creating-a-bucket
             self.bucket = self.client.Bucket(self.bucket).create()
         else:
             self.bucket = self.client.Bucket(self.bucket)
@@ -97,6 +99,7 @@ class S3File(object):
                 headers["Cache-Control"] = 'max-age=%d' % (self.expiration_days * 24 * 3600,)
 
             #self.key.set_contents_from_file(self.buffer, headers=headers, rewind=True)
+            #http://boto3.readthedocs.org/en/latest/guide/migrations3.html#storing-data
             self.key.put(Body=open(self.buffer, 'rb'))
 
 
