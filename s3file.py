@@ -74,9 +74,13 @@ class S3File(object):
                         Once only
         """
         if self._readreq:
+            print("this is the kye",self.key)
             self.buffer.truncate(0)
-            if self.key.exists():
-                self.key.get_contents_to_file(self.buffer)
+            # TODO - BOTO3 METHOD TO CHECK IF FILE EXISTS
+            # if self.key.exists():
+            #     self.key.get_contents_to_file(self.buffer)
+            #x = self.key.get()["Body"].read()
+            self.buffer.write(self.key.get()["Body"].read())
             self.buffer.seek(0)
             self._readreq = False
 
@@ -101,12 +105,8 @@ class S3File(object):
 
             # self.key.set_contents_from_file(self.buffer, headers=headers, rewind=True)
             # http://boto3.readthedocs.org/en/latest/guide/migrations3.html#storing-data
-            print(self.key.bucket_name)
-            print(dir(self.key))
-            print(type(self.buffer))
 
-            self.key.put(Body=str(self.buffer))
-
+            self.key.put(Body=self.buffer.getvalue())
 
     def close(self):
         """ Close the file and write contents to S3.
