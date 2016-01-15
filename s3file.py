@@ -105,7 +105,8 @@ class S3File(object):
             print(dir(self.key))
             print(type(self.buffer))
 
-            self.key.put(Body=self.buffer)
+            self.key.put(Body=str(self.buffer))
+
 
     def close(self):
         """ Close the file and write contents to S3.
