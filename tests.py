@@ -19,8 +19,9 @@ class TestS3File(unittest.TestCase):
 
 	def setUp(self):
 		session_id = "{0:06d}".format(random.randint(0, 999999))
-		self.key = session_key = self.key.lower() if self.key else session_id
+		session_key = self.key.lower() if self.key else session_id
 		bucket_name = "s3file_{0}_{1}".format("0", "1")  # (session_id, session_key)
+		self.lorem = "{0}/{1}/{2}".format(session_key, session_id, LOREM)
 		self.bucket = self.resource.Bucket(bucket_name)
 		exists = True
 		try:
@@ -28,7 +29,7 @@ class TestS3File(unittest.TestCase):
 			self.resource.meta.client.head_bucket(Bucket=bucket_name)
 			self.bucket.create()
 		except ClientError as e:
-			error_code = int(e.response['Error']['Code'])
+			error_code = int(e.response["Error"]["Code"])
 			if error_code == 404:
 				exists = False
 
@@ -45,47 +46,47 @@ class TestS3File(unittest.TestCase):
 		path = "test_write_cm.txt"
 
 		with s3open(self.get_url(path)) as f:
-			f.write(LOREM)
+			f.write(self.lorem)
 
-		k = self.resource.Object(self.bucket.name, self.key)
-		self.assertEqual(k.get()["Body"].read(), LOREM)
+		k = self.resource.Object(self.bucket.name, path)
+		self.assertEqual(k.get()["Body"].read(), self.lorem)
 
 	def test_write(self):
 		path = "test_write.txt"
 
 		# write using s3file
 		f = s3open(self.get_url(path))
-		f.write(LOREM)
+		f.write(self.lorem)
 		f.close()
 
 		# check contents using boto
 		k = self.resource.Object(self.bucket.name, path)
-		self.assertEqual(k.get()["Body"].read(), LOREM)
+		self.assertEqual(k.get()["Body"].read(), self.lorem)
 
 	def test_read(self):
 		path = "test_read.txt"
 
 		# write using boto
 		k = self.resource.Object(self.bucket.name, path)
-		k.put(Body=LOREM)
+		k.put(Body=self.lorem)
 
 		# check contents using s3file
 		f = s3open(self.get_url(path))
-		self.assertEqual(f.read(), LOREM)
+		self.assertEqual(f.read(), self.lorem)
 		f.close()
 
 	def test_tell(self):
 		url = self.get_url("test_tell.txt")
 		f = s3open(url)
-		f.write(LOREM)
+		f.write(self.lorem)
 		f.close()
 
 		f = s3open(url)
-		self.assertEqual(f.read(8), LOREM[:8])
+		self.assertEqual(f.read(8), self.lorem[:8])
 		self.assertEqual(f.tell(), 8)
 
 	def lorem_est(self):
-		lor = LOREM + "\n"
+		lor = self.lorem + "\n"
 		lines = [lor, lor[1:] + lor[:1], lor[2:] + lor[:2], lor[3:] + lor[:3],
 						 lor[4:] + lor[:4], lor[5:] + lor[:5], lor[6:] + lor[:6]]
 		return lines
@@ -124,7 +125,7 @@ class TestS3File(unittest.TestCase):
 		f = s3open(url)
 		rline = f.readline()
 		f.close()
-		self.assertEqual(rline, LOREM + "\n")
+		self.assertEqual(rline, self.lorem + "\n")
 
 	def test_closed(self):
 		path = "test_closed.txt"
@@ -138,13 +139,13 @@ class TestS3File(unittest.TestCase):
 		path = "test_name.txt"
 		url = self.get_url(path)
 		f = s3open(url)
-		self.assertEqual("s3://" + self.bucket.name + "/" + path, f.name)
+		self.assertEqual("s3://" + self.bucket.name + "/" + path, f.key)
 		f.close()
 
 	def test_flush(self):
 		path = "test_flush.txt"
 		url = self.get_url(path)
-		fl = LOREM + "\n" + LOREM + "\n"
+		fl = self.lorem + "\n" + self.lorem + "\n"
 		fl2 = fl + fl
 		f = s3open(url)
 		f.write(fl)
