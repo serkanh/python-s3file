@@ -1,135 +1,164 @@
 from urllib.parse import urlparse
-import io, mimetypes, os, datetime, boto3
+import io, mimetypes, os, datetime, boto3, botocore
+from botocore.client import ClientError
 
 __version__ = '1.3'
 
 
 def s3open(*args, **kwargs):
-	""" Convenience method for creating S3File object.
-	"""
-	return S3File(*args, **kwargs)
+    """ Convenience method for creating S3File object.
+    """
+    return S3File(*args, **kwargs)
 
 
 class S3File(object):
-	def __init__(self, url, key=None, secret=None, expiration_days=0, private=False, content_type=None, create=True):
+    def __init__(self, url, key=None, secret=None, expiration_days=0, private=False, content_type=None, create=True):
 
-		self.url = urlparse(url)
-		self.expiration_days = expiration_days
-		self.buffer = io.StringIO()
+        self.url = urlparse(url)
+        self.expiration_days = expiration_days
+        self.buffer = io.BytesIO()
 
-		self.private = private
-		self.closed = False
-		self._readreq = True
-		self._writereq = False
-		self.content_type = content_type or mimetypes.guess_type(self.url.path)[0]
+        self.private = private
+        self.closed = False
+        self._readreq = True
+        self._writereq = False
+        self.content_type = content_type or mimetypes.guess_type(self.url.path)[0]
 
-		bucket = self.url.netloc
-		if bucket.endswith('.s3.amazonaws.com'):
-			bucket = bucket[:-17]
+        # bucket = self.url.netloc
+        self.bucket_name = self.url.path.split("/")[1]
+        print(self.bucket_name)
+        # if bucket.endswith('.s3.amazonaws.com'):
+        #     bucket = bucket[:-17]
 
-		self.client = boto3.resource('s3')
+        self.client = boto3.resource('s3')
 
-		self.name = "s3://" + bucket + self.url.path
+        self.name = "s3://" + self.bucket_name + '/' + self.url.path.split("/")[-1]
+        print(self.name)
 
-		if create:
-			self.bucket = self.client.create_bucket(bucket)
-		else:
-			self.bucket = self.client.get_bucket(bucket, validate=False)
+        # The boto-specific methods.
+        def bucket_exists(bucket_name):
+            """
+            Returns ``True`` if a bucket exists and you have access to
+            call ``HeadBucket`` on it, otherwise ``False``.
+            """
+            try:
+                # http://boto3.readthedocs.org/en/latest/guide/migrations3.html#accessing-a-bucket
+                self.client.meta.client.head_bucket(Bucket=bucket_name)
+                return True
+            except ClientError:
+                return False
 
-		self.name = self.url.path.lstrip("/")
-		self.key = self.client.Object(self.bucket, self.name)
+        self.name = self.url.path.lstrip("/")
 
-		self.buffer.truncate(0)
+        if create and not bucket_exists(self.bucket_name):
+            print("creating bucket", self.bucket_name)
+            # http://boto3.readthedocs.org/en/latest/guide/migrations3.html#creating-a-bucket
+            self.bucket = self.client.Bucket(self.bucket_name)
+            self.bucket.create()
+        else:
+            self.bucket = self.client.Bucket(self.bucket_name)
 
-	def __enter__(self):
-		return self
+        #    self.name="serkantest.txt"
+        self.key = self.client.Object(self.bucket_name, self.name)
 
-	def __exit__(self, type, value, traceback):
-		self.close()
+        self.buffer.truncate(0)
 
-	def _remote_read(self):
-		""" Read S3 contents into internal file buffer.
-				Once only
-		"""
-		if self._readreq:
-			self.buffer.truncate(0)
-			if self.key.exists():
-				self.key.get_contents_to_file(self.buffer)
-			self.buffer.seek(0)
-			self._readreq = False
+    def __enter__(self):
+        return self
 
-	def _remote_write(self):
-		""" Write file contents to S3 from internal buffer.
-		"""
-		if self._writereq:
-			self.truncate(self.tell())
+    def __exit__(self, type, value, traceback):
+        self.close()
 
-			headers = {
-				"x-amz-acl": "private" if self.private else "public-read"
-			}
+    def _remote_read(self):
+        """ Read S3 contents into internal file buffer.
+                        Once only
+        """
+        if self._readreq:
+            print("this is the kye",self.key)
+            self.buffer.truncate(0)
+            # TODO - BOTO3 METHOD TO CHECK IF FILE EXISTS
+            # if self.key.exists():
+            #     self.key.get_contents_to_file(self.buffer)
+            #x = self.key.get()["Body"].read()
+            self.buffer.write(self.key.get()["Body"].read())
+            self.buffer.seek(0)
+            self._readreq = False
 
-			if self.content_type:
-				headers["Content-Type"] = self.content_type
+    def _remote_write(self):
+        """ Write file contents to S3 from internal buffer.
+        """
+        if self._writereq:
+            self.truncate(self.tell())
 
-			if self.expiration_days:
-				now = datetime.datetime.utcnow()
-				then = now + datetime.timedelta(self.expiration_days)
-				headers["Expires"] = then.strftime("%a, %d %b %Y %H:%M:%S GMT")
-				headers["Cache-Control"] = 'max-age=%d' % (self.expiration_days * 24 * 3600,)
+            headers = {
+                "x-amz-acl": "private" if self.private else "public-read"
+            }
 
-			self.key.set_contents_from_file(self.buffer, headers=headers, rewind=True)
+            if self.content_type:
+                headers["Content-Type"] = self.content_type
 
-	def close(self):
-		""" Close the file and write contents to S3.
-		"""
-		self._remote_write()
-		self.buffer.close()
-		self.closed = True
+            if self.expiration_days:
+                now = datetime.datetime.utcnow()
+                then = now + datetime.timedelta(self.expiration_days)
+                headers["Expires"] = then.strftime("%a, %d %b %Y %H:%M:%S GMT")
+                headers["Cache-Control"] = 'max-age=%d' % (self.expiration_days * 24 * 3600,)
 
-	# pass-through methods
+            # self.key.set_contents_from_file(self.buffer, headers=headers, rewind=True)
+            # http://boto3.readthedocs.org/en/latest/guide/migrations3.html#storing-data
 
-	def flush(self):
-		self._remote_write()
+            self.key.put(Body=self.buffer.getvalue())
 
-	def __next__(self):
-		self._remote_read()
-		return next(self.buffer)
+    def close(self):
+        """ Close the file and write contents to S3.
+        """
+        self._remote_write()
+        self.buffer.close()
+        self.closed = True
 
-	def read(self, size=-1):
-		self._remote_read()
-		return self.buffer.read(size)
+    # pass-through methods
 
-	def readline(self, size=-1):
-		self._remote_read()
-		return self.buffer.readline(size)
+    def flush(self):
+        self._remote_write()
 
-	def readlines(self, sizehint=-1):
-		self._remote_read()
-		return self.buffer.readlines(sizehint)
+    def __next__(self):
+        self._remote_read()
+        return next(self.buffer)
 
-	def xreadlines(self):
-		self._remote_read()
-		return self.buffer
+    def read(self, size=-1):
+        self._remote_read()
+        return self.buffer.read(size)
 
-	def seek(self, offset, whence=os.SEEK_SET):
-		self.buffer.seek(offset, whence)
-		# if it looks like we are moving in the file and we have not written
-		# anything then we probably should read the contents
-		if self.tell() != 0 and self._readreq and not self._writereq:
-			self._remote_read()
-			self.buffer.seek(offset, whence)
+    def readline(self, size=-1):
+        self._remote_read()
+        return self.buffer.readline(size)
 
-	def tell(self):
-		return self.buffer.tell()
+    def readlines(self, sizehint=-1):
+        self._remote_read()
+        return self.buffer.readlines(sizehint)
 
-	def truncate(self, size=None):
-		self._writereq = True
-		self.buffer.truncate(size or self.tell())
+    def xreadlines(self):
+        self._remote_read()
+        return self.buffer
 
-	def write(self, s):
-		self._writereq = True
-		self.buffer.write(s)
+    def seek(self, offset, whence=os.SEEK_SET):
+        self.buffer.seek(offset, whence)
+        # if it looks like we are moving in the file and we have not written
+        # anything then we probably should read the contents
+        if self.tell() != 0 and self._readreq and not self._writereq:
+            self._remote_read()
+            self.buffer.seek(offset, whence)
 
-	def writelines(self, sequence):
-		self._writereq = True
-		self.buffer.writelines(sequence)
+    def tell(self):
+        return self.buffer.tell()
+
+    def truncate(self, size=None):
+        self._writereq = True
+        self.buffer.truncate(size or self.tell())
+
+    def write(self, s):
+        self._writereq = True
+        self.buffer.write(str.encode(s))
+
+    def writelines(self, sequence):
+        self._writereq = True
+        self.buffer.writelines(sequence)
