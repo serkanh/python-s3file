@@ -24,44 +24,44 @@ class S3File(object):
         self._writereq = False
         self.content_type = content_type or mimetypes.guess_type(self.url.path)[0]
 
-        #bucket = self.url.netloc
-        self.bucket=self.url.path.split("/")[1]
+        # bucket = self.url.netloc
+        self.bucket_name = self.url.path.split("/")[1]
+        print(self.bucket_name)
         # if bucket.endswith('.s3.amazonaws.com'):
         #     bucket = bucket[:-17]
 
         self.client = boto3.resource('s3')
 
-        self.name = "s3://" + self.bucket + self.url.path
+        self.name = "s3://" + self.bucket_name + '/' + self.url.path.split("/")[-1]
+        print(self.name)
 
-         # The boto-specific methods.
+        # The boto-specific methods.
         def bucket_exists(bucket_name):
             """
             Returns ``True`` if a bucket exists and you have access to
             call ``HeadBucket`` on it, otherwise ``False``.
             """
             try:
-                #http://boto3.readthedocs.org/en/latest/guide/migrations3.html#accessing-a-bucket
+                # http://boto3.readthedocs.org/en/latest/guide/migrations3.html#accessing-a-bucket
                 self.client.meta.client.head_bucket(Bucket=bucket_name)
                 return True
             except ClientError:
                 return False
 
-
-        if create and not bucket_exists(self.bucket):
-            print("creating bucket")
-            #http://boto3.readthedocs.org/en/latest/guide/migrations3.html#creating-a-bucket
-            self.bucket = self.client.Bucket(self.bucket).create()
-        else:
-            self.bucket = self.client.Bucket(self.bucket)
-
         self.name = self.url.path.lstrip("/")
-    #    self.name="serkantest.txt"
-        self.key = self.client.Object(self.bucket, self.name)
+
+        if create and not bucket_exists(self.bucket_name):
+            print("creating bucket", self.bucket_name)
+            # http://boto3.readthedocs.org/en/latest/guide/migrations3.html#creating-a-bucket
+            self.bucket = self.client.Bucket(self.bucket_name)
+            self.bucket.create()
+        else:
+            self.bucket = self.client.Bucket(self.bucket_name)
+
+        #    self.name="serkantest.txt"
+        self.key = self.client.Object(self.bucket_name, self.name)
 
         self.buffer.truncate(0)
-
-
-
 
     def __enter__(self):
         return self
@@ -71,7 +71,7 @@ class S3File(object):
 
     def _remote_read(self):
         """ Read S3 contents into internal file buffer.
-                Once only
+                        Once only
         """
         if self._readreq:
             self.buffer.truncate(0)
@@ -99,16 +99,13 @@ class S3File(object):
                 headers["Expires"] = then.strftime("%a, %d %b %Y %H:%M:%S GMT")
                 headers["Cache-Control"] = 'max-age=%d' % (self.expiration_days * 24 * 3600,)
 
-            #self.key.set_contents_from_file(self.buffer, headers=headers, rewind=True)
-            #http://boto3.readthedocs.org/en/latest/guide/migrations3.html#storing-data
+            # self.key.set_contents_from_file(self.buffer, headers=headers, rewind=True)
+            # http://boto3.readthedocs.org/en/latest/guide/migrations3.html#storing-data
             print(self.key.bucket_name)
             print(dir(self.key))
             print(type(self.buffer))
 
             self.key.put(Body=self.buffer)
-
-
-
 
     def close(self):
         """ Close the file and write contents to S3.
@@ -160,7 +157,6 @@ class S3File(object):
     def write(self, s):
         self._writereq = True
         self.buffer.write(str.encode(s))
-
 
     def writelines(self, sequence):
         self._writereq = True
