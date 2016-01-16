@@ -15,13 +15,13 @@ class TestS3File(unittest.TestCase):
 		super(TestS3File, self).__init__(testname)
 		self.key = key
 		self.secret = secret
+		self.session_id = "{0:06d}".format(random.randint(0, 999999))
 		self.resource = boto3.resource("s3")
 
 	def setUp(self):
-		session_id = "{0:06d}".format(random.randint(0, 999999))
-		session_key = self.key.lower() if self.key else session_id
+		session_key = self.key.lower() if self.key else self.session_id
 		bucket_name = "s3file_{0}_{1}".format("0", "1")  # (session_id, session_key)
-		self.lorem = "{0}/{1}/{2}".format(session_key, session_id, LOREM)
+		self.lorem = "{0}/{1}/{2}".format(session_key, self.session_id, LOREM)
 		self.bucket = self.resource.Bucket(bucket_name)
 		exists = True
 		try:
@@ -82,7 +82,7 @@ class TestS3File(unittest.TestCase):
 		f.close()
 
 		f = s3open(url)
-		self.assertEqual(f.read(8), self.lorem[:8])
+		self.assertEqual(str(f.read(8), 'utf-8'), self.lorem[:8])
 		self.assertEqual(f.tell(), 8)
 
 	def lorem_est(self):
@@ -100,7 +100,7 @@ class TestS3File(unittest.TestCase):
 		k.put(Body=res)
 		f = s3open(url)
 		rlines = f.readlines()
-		rres = "".join(rlines)
+		rres = "".join(str(rlines, 'utf-8'))
 		f.close()
 		self.assertEqual(res, rres)
 
@@ -110,7 +110,7 @@ class TestS3File(unittest.TestCase):
 		f = s3open(url)
 		lines = self.lorem_est()
 		res = "".join(lines)
-		f.writelines(lines)
+		f.writelines(str(lines, 'utf-8'))
 		f.close()
 		k = self.resource.Object(self.bucket.name, path)
 		self.assertEqual(k.get()["Body"].read(), res)
@@ -166,7 +166,7 @@ class TestS3File(unittest.TestCase):
 		f = s3open(url)
 		rres = ""
 		for lin in f.xreadlines():
-			rres += lin
+			rres += str(lin, 'utf-8')
 		f.close()
 		self.assertEqual(res, rres)
 
@@ -244,8 +244,8 @@ class TestS3File(unittest.TestCase):
 		k.put(Body=bs)
 		url = self.get_url(path)
 		f = s3open(url)
-		read = f.read()
-		self.assertEqual(f.read(), bs)
+		read = str(f.read(), 'utf-8')
+		self.assertEqual(read, bs)
 		f.close()
 
 	def test_large_binary_read(self):
@@ -256,7 +256,8 @@ class TestS3File(unittest.TestCase):
 		k = self.resource.Object(self.bucket.name, path)
 		k.put(Body=bs)
 		f = s3open(self.get_url(path))
-		self.assertEqual(f.read(), bs)
+		read = f.read()
+		self.assertEqual(read, bs)
 		f.close()
 
 	def tearDown(self):
