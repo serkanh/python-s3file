@@ -144,4 +144,4 @@ class S3File(object):
 
 	def writelines(self, sequence):
 		self._writereq = True
-		self.buffer.writelines(sequence)
+		self.buffer.writelines([str.encode(s) for s in sequence])

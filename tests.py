@@ -15,13 +15,13 @@ class TestS3File(unittest.TestCase):
 		super(TestS3File, self).__init__(testname)
 		self.key = key
 		self.secret = secret
-		self.session_id = "{0:06d}".format(random.randint(0, 999999))
+		from datetime import datetime
+		self.session_id = "{0}_{1:06d}".format(datetime.now().strftime("%Y%m%dt%H%M%S"),random.randint(0, 999999))
 		self.resource = boto3.resource("s3")
 
 	def setUp(self):
-		session_key = self.key.lower() if self.key else self.session_id
-		bucket_name = "s3file_{0}_{1}".format("0", "1")  # (session_id, session_key)
-		self.lorem = "{0}/{1}/{2}".format(session_key, self.session_id, LOREM)
+		bucket_name = "s3file_{0}".format(self.session_id)
+		self.lorem = "{0}/{1}".format(self.session_id, LOREM)
 		self.bucket = self.resource.Bucket(bucket_name)
 		exists = True
 		try:
@@ -39,9 +39,6 @@ class TestS3File(unittest.TestCase):
 	def get_url(self, path):
 		return "http://{0}.s3.amazonaws.com/{1}".format(self.bucket.name, path.lstrip("/"))
 
-	def test_specific(self):
-		print("ok")
-
 	def test_context_manager(self):
 		path = "test_write_cm.txt"
 
@@ -49,7 +46,8 @@ class TestS3File(unittest.TestCase):
 			f.write(self.lorem)
 
 		k = self.resource.Object(self.bucket.name, path)
-		self.assertEqual(k.get()["Body"].read(), self.lorem)
+		read = str(k.get()["Body"].read(), 'utf-8')
+		self.assertEqual(read, self.lorem)
 
 	def test_write(self):
 		path = "test_write.txt"
@@ -61,7 +59,7 @@ class TestS3File(unittest.TestCase):
 
 		# check contents using boto
 		k = self.resource.Object(self.bucket.name, path)
-		self.assertEqual(k.get()["Body"].read(), self.lorem)
+		self.assertEqual(str(k.get()["Body"].read(), 'utf-8'), self.lorem)
 
 	def test_read(self):
 		path = "test_read.txt"
@@ -72,7 +70,7 @@ class TestS3File(unittest.TestCase):
 
 		# check contents using s3file
 		f = s3open(self.get_url(path))
-		self.assertEqual(f.read(), self.lorem)
+		self.assertEqual(str(f.read(), 'utf-8'), self.lorem)
 		f.close()
 
 	def test_tell(self):
@@ -100,7 +98,7 @@ class TestS3File(unittest.TestCase):
 		k.put(Body=res)
 		f = s3open(url)
 		rlines = f.readlines()
-		rres = "".join(str(rlines, 'utf-8'))
+		rres = "".join([str(s, 'utf-8') for s in rlines])
 		f.close()
 		self.assertEqual(res, rres)
 
@@ -110,10 +108,10 @@ class TestS3File(unittest.TestCase):
 		f = s3open(url)
 		lines = self.lorem_est()
 		res = "".join(lines)
-		f.writelines(str(lines, 'utf-8'))
+		f.writelines(lines)
 		f.close()
 		k = self.resource.Object(self.bucket.name, path)
-		self.assertEqual(k.get()["Body"].read(), res)
+		self.assertEqual(str(k.get()["Body"].read(), 'utf-8'), res)
 
 	def test_readline(self):
 		path = "test_readline.txt"
@@ -123,7 +121,7 @@ class TestS3File(unittest.TestCase):
 		k = self.resource.Object(self.bucket.name, path)
 		k.put(Body=res)
 		f = s3open(url)
-		rline = f.readline()
+		rline = str(f.readline(), 'utf-8')
 		f.close()
 		self.assertEqual(rline, self.lorem + "\n")
 
@@ -139,7 +137,7 @@ class TestS3File(unittest.TestCase):
 		path = "test_name.txt"
 		url = self.get_url(path)
 		f = s3open(url)
-		self.assertEqual("s3://" + self.bucket.name + "/" + path, f.key)
+		self.assertEqual("s3://" + self.bucket.name + "/" + path, f.path)
 		f.close()
 
 	def test_flush(self):
@@ -151,10 +149,10 @@ class TestS3File(unittest.TestCase):
 		f.write(fl)
 		f.flush()
 		k = self.resource.Object(self.bucket.name, path)
-		self.assertEqual(k.get()["Body"].read(), fl)
+		self.assertEqual(str(k.get()["Body"].read(), 'utf-8'), fl)
 		f.write(fl)
 		f.close()
-		self.assertEqual(k.get()["Body"].read(), fl2)
+		self.assertEqual(str(k.get()["Body"].read(), 'utf-8'), fl2)
 
 	def test_xreadlines(self):
 		path = "test_xreadlines.txt"
@@ -180,13 +178,13 @@ class TestS3File(unittest.TestCase):
 		k.put(Body=res)
 		f = s3open(url)
 		f.seek(2, 0)
-		self.assertEqual(f.read(8), res[2:10])
+		self.assertEqual(str(f.read(8), 'utf-8'), res[2:10])
 		f.seek(1)
-		self.assertEqual(f.read(8), res[1:9])
+		self.assertEqual(str(f.read(8), 'utf-8'), res[1:9])
 		f.seek(-1, 1)
-		self.assertEqual(f.read(9), res[8:17])
+		self.assertEqual(str(f.read(9), 'utf-8'), res[8:17])
 		f.seek(-10, 2)
-		self.assertEqual(f.read(10), res[-10:])
+		self.assertEqual(str(f.read(10), 'utf-8'), res[-10:])
 		f.close()
 
 	def test_truncate(self):
@@ -202,13 +200,13 @@ class TestS3File(unittest.TestCase):
 		f.close()
 
 		t = s3open(url)
-		self.assertEqual(t.read(), res[:3])
+		self.assertEqual(str(t.read(), 'utf-8'), res[:3])
 		t.seek(1, 0)
 		t.truncate()
 		t.close()
 
 		f = s3open(url)
-		self.assertEqual(f.read(), res[:1])
+		self.assertEqual(str(f.read(), 'utf-8'), res[:1])
 		f.close()
 
 	def _bin_str(self):
@@ -224,7 +222,8 @@ class TestS3File(unittest.TestCase):
 		f.write(bs)
 		f.close()
 		k = self.resource.Object(self.bucket.name, path)
-		self.assertEqual(k.get()["Body"].read(), bs)
+		read = str(k.get()["Body"].read(), 'utf-8')
+		self.assertEqual(read, bs)
 
 	def test_large_binary_write(self):
 		path = "test_large_binary_write.txt"
@@ -235,7 +234,7 @@ class TestS3File(unittest.TestCase):
 		f.write(bs)
 		f.close()
 		k = self.resource.Object(self.bucket.name, path)
-		self.assertEqual(k.get()["Body"].read(), bs)
+		self.assertEqual(str(k.get()["Body"].read(), 'utf-8'), bs)
 
 	def test_binary_read(self):
 		path = "test_binary_read.txt"
@@ -256,7 +255,7 @@ class TestS3File(unittest.TestCase):
 		k = self.resource.Object(self.bucket.name, path)
 		k.put(Body=bs)
 		f = s3open(self.get_url(path))
-		read = f.read()
+		read = str(f.read(), 'utf-8')
 		self.assertEqual(read, bs)
 		f.close()
 
